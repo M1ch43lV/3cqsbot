@@ -32,4 +32,5 @@ account_name = "Your paper account here - without quotes"
 single = false
 
 [filter]
+### possible symrank_signal: top10, top30, top50, triple100, quadruple100, quadruple250, svol, svoldouble, hvol, hvoldouble, uvol, xvol, all
 symrank_signal = quadruple100

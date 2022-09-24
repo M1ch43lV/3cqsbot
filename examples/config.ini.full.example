@@ -161,7 +161,7 @@ single = False
 #singlebot_update = True
 
 [filter]
-### possible symrank_signal: triple100, quadruple100, quadruple250, top30, svol, svoldouble, hvol, hvoldouble, uvol, xvol, all
+### possible symrank_signal: top10, top30, top50, triple100, quadruple100, quadruple250, svol, svoldouble, hvol, hvoldouble, uvol, xvol, all
 symrank_signal = quadruple100
 #symrank_limit_min = 1
 #symrank_limit_max = 100

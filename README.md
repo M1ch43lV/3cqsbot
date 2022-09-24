@@ -1,8 +1,9 @@
-# Based on TBMoonWalker's 3CQSBot v2.1.4-alpha script - Improved by M1ch43l with adding following features v.2.6.0-beta
+# Based on TBMoonWalker's 3CQSBot v2.1.4-alpha script - Improved by M1ch43l with adding following features v.2.6.1-beta
 
 2022.09.24:
 
 1. New midnight statistics implemented including mean profit per day/month/year and ROI for single- and multibot
+2. Added processing of Top10 and Top50 3cqs signals
 
 2022.09.14:
 
@@ -16,6 +17,8 @@
 8. White-list for pairs implemented - trade only certain coins
 9. Improved error handling if 3Commas, CoinGeckos or Yahoo Finance API requests are lagging
 10. Backwards compatibility to v2.1.4 - use your old config
+
+For questions contact me @M1ch43l on discord: <https://discord.gg/tradealts>
 
 ## Summary
 
@@ -304,11 +307,23 @@ These four indicators are tracked and if any fall out the starting thresholds fo
 Criteria for BOT_START: SymRank <= 250, Volatility Score >= 3, Price Action Score >= 2, RSI-14 15m <= 65  
 These four indicators are tracked and if any fall out the starting thresholds for a period of time a BOT_STOP signal is sent
 
+#### ```top10```
+
+**Signal Name**: SymRank Top 10  
+Criteria for BOT_START: SymRank <= 10  
+SymRank is tracked and if the symbol falls out of the Top 10 for a period of time a BOT_STOP signal is sent
+
 #### ```top30```
 
 **Signal Name**: SymRank Top 30  
 Criteria for BOT_START: SymRank <= 30  
 SymRank is tracked and if the symbol falls out of the Top 30 for a period of time a BOT_STOP signal is sent
+
+#### ```top50```
+
+**Signal Name**: SymRank Top 50  
+Criteria for BOT_START: SymRank <= 50  
+SymRank is tracked and if the symbol falls out of the Top 50 for a period of time a BOT_STOP signal is sent
 
 #### ```svol```
 
