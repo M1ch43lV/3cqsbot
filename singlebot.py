@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from babel.dates import format_timedelta
 from babel.numbers import format_currency
@@ -93,15 +93,21 @@ class SingleBot:
 
         return len(bots), bots
 
-    def report_funds_needed(self, maxdeals):
-
-        tp = self.attributes.get("tp", "", self.asyncState.dca_conf)
-        bo = self.attributes.get("bo", "", self.asyncState.dca_conf)
-        so = self.attributes.get("so", "", self.asyncState.dca_conf)
-        os = self.attributes.get("os", "", self.asyncState.dca_conf)
-        ss = self.attributes.get("ss", "", self.asyncState.dca_conf)
-        sos = self.attributes.get("sos", "", self.asyncState.dca_conf)
-        mstc = self.attributes.get("mstc", "", self.asyncState.dca_conf)
+    def report_funds_needed(self, dca_conf, report=True):
+        if report:
+            deal_mode = self.get_deal_mode()
+            self.logging.info(
+                "Deal start condition(s): " + deal_mode,
+                True,
+            )
+        tp = self.attributes.get("tp", "", dca_conf)
+        bo = self.attributes.get("bo", "", dca_conf)
+        so = self.attributes.get("so", "", dca_conf)
+        os = self.attributes.get("os", "", dca_conf)
+        ss = self.attributes.get("ss", "", dca_conf)
+        sos = self.attributes.get("sos", "", dca_conf)
+        mstc = self.attributes.get("mstc", "", dca_conf)
+        maxbots = self.attributes.get("single_count", "", dca_conf)
 
         fundsneeded = bo + so
         amount = so
@@ -119,8 +125,8 @@ class SingleBot:
             required_change = ((required_price / price) - 1) * 100
 
         self.logging.info(
-            "["
-            + self.asyncState.dca_conf
+            "Using DCA settings ["
+            + dca_conf
             + "] TP: "
             + str(tp)
             + "%  BO: $"
@@ -143,15 +149,15 @@ class SingleBot:
         )
         self.logging.info(
             "Max possible single bot deals: "
-            + str(maxdeals)
+            + str(maxbots)
             + "   Funds per single bot deal: "
             + format_currency(fundsneeded, "USD", locale="en_US")
             + "   Total funds needed: "
-            + format_currency(maxdeals * fundsneeded, "USD", locale="en_US"),
+            + format_currency(maxbots * fundsneeded, "USD", locale="en_US"),
             True,
         )
 
-        return
+        return maxbots * fundsneeded
 
     def report_deals(self):
 
@@ -159,9 +165,9 @@ class SingleBot:
         counted_all_bots, all_bots = self.count_all_bots()
 
         self.logging.info(
-            "Active deals running: "
+            "Active deals running / max. allowed: "
             + str(counted_active_deals)
-            + "/"
+            + " / "
             + str(self.attributes.get("single_count", "", self.asyncState.dca_conf)),
             True,
         )
@@ -174,6 +180,59 @@ class SingleBot:
             + str(counted_all_bots)
             + " single bots with finished deals: "
             + format_currency(total_profit, "USD", locale="en_US"),
+            True,
+        )
+
+        bot_creation_date = datetime.utcnow() - datetime.utcnow()
+        for bot in all_bots:
+            bot_creation_date_diff = datetime.utcnow() - datetime.strptime(
+                bot["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+            )
+            if bot_creation_date_diff > bot_creation_date:
+                bot_creation_date = bot_creation_date_diff
+
+        delta_day = bot_creation_date / timedelta(days=1)
+        delta_month = bot_creation_date / timedelta(days=30)
+        delta_year = bot_creation_date / timedelta(days=365)
+
+        profit_per_day = total_profit / delta_day
+        profit_per_month = total_profit / delta_month
+        profit_per_year = total_profit / delta_year
+
+        maxfunds = 0
+        if self.attributes.get("fgi_trading", False):
+            maxfunds = self.report_funds_needed(self.asyncState.dca_conf, False)
+        else:
+            maxfunds = self.report_funds_needed("dcabot", False)
+
+        daily_roi = round(profit_per_day / maxfunds * 100, 2)
+        monthly_roi = round(profit_per_month / maxfunds * 100, 1)
+        yearly_roi = round(profit_per_year / maxfunds * 100, 1)
+
+        self.logging.info(
+            "Mean profit/ROI compared to max. usable funds of "
+            + format_currency(maxfunds, "USD", locale="en_US")
+            + " according to DCA settings ["
+            + self.asyncState.dca_conf
+            + "] since last single bot creation "
+            + format_timedelta(bot_creation_date, locale="en_US")
+            + " ago",
+            True,
+        )
+        self.logging.info(
+            "Profit daily: "
+            + format_currency(profit_per_day, "USD", locale="en_US")
+            + " (ROI: "
+            + str(daily_roi)
+            + "%) - monthly: "
+            + format_currency(profit_per_month, "USD", locale="en_US")
+            + " (ROI: "
+            + str(monthly_roi)
+            + "%) - yearly: "
+            + format_currency(profit_per_year, "USD", locale="en_US")
+            + " (ROI: "
+            + str(yearly_roi)
+            + "%)",
             True,
         )
 
@@ -196,7 +255,7 @@ class SingleBot:
                         - datetime.strptime(bot["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"),
                         locale="en_US",
                     )
-                    + "   Actual profit: "
+                    + " - actual profit: "
                     + format_currency(
                         bot["active_deals_usd_profit"], "USD", locale="en_US"
                     )
@@ -226,16 +285,16 @@ class SingleBot:
                                 ),
                                 locale="en_US",
                             )
-                            + "   Actual profit: "
+                            + " - actual profit: "
                             + format_currency(
                                 deals["actual_usd_profit"], "USD", locale="en_US"
                             )
                             + " ("
                             + deals["actual_profit_percentage"]
                             + "%)"
-                            + "   Bought volume: "
+                            + " - bought volume: "
                             + bought_volume
-                            + "   Deal error: "
+                            + " - deal error: "
                             + str(deals["deal_has_error"]),
                             True,
                         )
@@ -565,7 +624,7 @@ class SingleBot:
                                     "single_count", "", self.asyncState.dca_conf
                                 ):
                                     self.create()  # create and enable bot
-                                    self.report_funds_needed(maxdeals)
+                                    maxfunds = self.report_funds_needed()
                                     self.report_deals()
                                 else:
                                     self.logging.info(
@@ -633,7 +692,7 @@ class SingleBot:
                                 "single_count", "", self.asyncState.dca_conf
                             ):
                                 self.enable(bot)
-                                self.report_funds_needed(maxdeals)
+                                maxfunds = self.report_funds_needed()
                                 self.report_deals()
                             else:
                                 self.logging.info(
@@ -669,5 +728,5 @@ class SingleBot:
         else:
             self.logging.info("No single bots found - creating new ones", True)
             self.create()
-            self.report_funds_needed(maxdeals)
+            maxfunds = self.report_funds_needed()
             self.report_deals()

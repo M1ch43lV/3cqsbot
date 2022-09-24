@@ -1,7 +1,8 @@
+from calendar import month
 import json
 import random
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from babel.dates import format_timedelta
 from babel.numbers import format_currency
@@ -53,9 +54,9 @@ class MultiBot:
 
     def report_deals(self, report_latency=False):
         self.logging.info(
-            "Deals active: "
+            "Deals active / actually allowed: "
             + str(self.asyncState.multibot["active_deals_count"])
-            + "/"
+            + " / "
             + str(self.asyncState.multibot["max_active_deals"]),
             True,
         )
@@ -70,6 +71,58 @@ class MultiBot:
             ),
             True,
         )
+        bot_creation_date = datetime.utcnow() - datetime.strptime(
+            self.asyncState.multibot["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        delta_day = bot_creation_date / timedelta(days=1)
+        delta_month = bot_creation_date / timedelta(days=30)
+        delta_year = bot_creation_date / timedelta(days=365)
+        profit_per_day = (
+            float(self.asyncState.multibot["finished_deals_profit_usd"]) / delta_day
+        )
+        profit_per_month = (
+            float(self.asyncState.multibot["finished_deals_profit_usd"]) / delta_month
+        )
+        profit_per_year = (
+            float(self.asyncState.multibot["finished_deals_profit_usd"]) / delta_year
+        )
+        maxfunds = 0
+        if self.attributes.get("fgi_trading", False):
+            maxfunds = self.report_funds_needed(self.asyncState.dca_conf, False)
+        else:
+            maxfunds = self.report_funds_needed("dcabot", False)
+
+        daily_roi = round(profit_per_day / maxfunds * 100, 2)
+        monthly_roi = round(profit_per_month / maxfunds * 100, 1)
+        yearly_roi = round(profit_per_year / maxfunds * 100, 1)
+
+        self.logging.info(
+            "Mean profit/ROI compared to max. usable funds of "
+            + format_currency(maxfunds, "USD", locale="en_US")
+            + " according to DCA settings ["
+            + self.asyncState.dca_conf
+            + "] since bot creation "
+            + format_timedelta(bot_creation_date, locale="en_US")
+            + " ago",
+            True,
+        )
+        self.logging.info(
+            "Profit daily: "
+            + format_currency(profit_per_day, "USD", locale="en_US")
+            + " (ROI: "
+            + str(daily_roi)
+            + "%) - monthly: "
+            + format_currency(profit_per_month, "USD", locale="en_US")
+            + " (ROI: "
+            + str(monthly_roi)
+            + "%) - yearly: "
+            + format_currency(profit_per_year, "USD", locale="en_US")
+            + " (ROI: "
+            + str(yearly_roi)
+            + "%)",
+            True,
+        )
+
         self.logging.info(
             "uPNL of active deals: "
             + format_currency(
@@ -135,14 +188,14 @@ class MultiBot:
                         ),
                         locale="en_US",
                     )
-                    + "   Actual profit: "
+                    + " - actual profit: "
                     + format_currency(deals["actual_usd_profit"], "USD", locale="en_US")
                     + " ("
                     + deals["actual_profit_percentage"]
                     + "%)"
-                    + "   Bought volume: "
+                    + " - bought volume: "
                     + bought_volume
-                    + "   Deal error: "
+                    + " - deal error: "
                     + str(deals["deal_has_error"]),
                     True,
                 )
@@ -159,20 +212,22 @@ class MultiBot:
             strategy = self.attributes.get("deal_mode", "")
         return strategy
 
-    def report_funds_needed(self, maxdeals):
-        deal_mode = self.get_deal_mode()
-        self.logging.info(
-            "Deal start condition(s): " + deal_mode,
-            True,
-        )
+    def report_funds_needed(self, dca_conf, report=True):
+        if report:
+            deal_mode = self.get_deal_mode()
+            self.logging.info(
+                "Deal start condition(s): " + deal_mode,
+                True,
+            )
 
-        tp = self.attributes.get("tp", "", self.asyncState.dca_conf)
-        bo = self.attributes.get("bo", "", self.asyncState.dca_conf)
-        so = self.attributes.get("so", "", self.asyncState.dca_conf)
-        os = self.attributes.get("os", "", self.asyncState.dca_conf)
-        ss = self.attributes.get("ss", "", self.asyncState.dca_conf)
-        sos = self.attributes.get("sos", "", self.asyncState.dca_conf)
-        mstc = self.attributes.get("mstc", "", self.asyncState.dca_conf)
+        tp = self.attributes.get("tp", "", dca_conf)
+        bo = self.attributes.get("bo", "", dca_conf)
+        so = self.attributes.get("so", "", dca_conf)
+        os = self.attributes.get("os", "", dca_conf)
+        ss = self.attributes.get("ss", "", dca_conf)
+        sos = self.attributes.get("sos", "", dca_conf)
+        mstc = self.attributes.get("mstc", "", dca_conf)
+        mad = self.attributes.get("mad", "", dca_conf)
 
         fundsneeded = bo + so
         amount = so
@@ -189,40 +244,41 @@ class MultiBot:
             required_price = avg_price * tp / 100 + avg_price
             required_change = ((required_price / price) - 1) * 100
 
-        self.logging.info(
-            "Using DCA settings ["
-            + self.asyncState.dca_conf
-            + "]:  TP: "
-            + str(tp)
-            + "%  BO: $"
-            + str(bo)
-            + "  SO: $"
-            + str(so)
-            + "  OS: "
-            + str(os)
-            + "  SS: "
-            + str(ss)
-            + "  SOS: "
-            + str(sos)
-            + "%  MSTC: "
-            + str(mstc)
-            + " - covering max price dev: "
-            + f"{pd:2.1f}"
-            + "% - max required change: "
-            + f"{required_change:2.1f}%",
-            True,
-        )
-        self.logging.info(
-            "Max active deals (mad) allowed: "
-            + str(maxdeals)
-            + "   Max funds per active deal (all SO filled): "
-            + format_currency(fundsneeded, "USD", locale="en_US")
-            + "   Total funds needed: "
-            + format_currency(maxdeals * fundsneeded, "USD", locale="en_US"),
-            True,
-        )
+        if report:
+            self.logging.info(
+                "Using DCA settings ["
+                + dca_conf
+                + "]:  TP: "
+                + str(tp)
+                + "%  BO: $"
+                + str(bo)
+                + "  SO: $"
+                + str(so)
+                + "  OS: "
+                + str(os)
+                + "  SS: "
+                + str(ss)
+                + "  SOS: "
+                + str(sos)
+                + "%  MSTC: "
+                + str(mstc)
+                + " - covering max price dev: "
+                + f"{pd:2.1f}"
+                + "% - max required change: "
+                + f"{required_change:2.1f}%",
+                True,
+            )
+            self.logging.info(
+                "Max active deals (mad) allowed: "
+                + str(mad)
+                + "   Max funds per active deal (all SO filled): "
+                + format_currency(fundsneeded, "USD", locale="en_US")
+                + "   Total funds needed: "
+                + format_currency(mad * fundsneeded, "USD", locale="en_US"),
+                True,
+            )
 
-        return
+        return mad * fundsneeded
 
     def strategy(self):
         deal_mode = self.get_deal_mode()
@@ -678,7 +734,12 @@ class MultiBot:
 
         # if no filtered coins left -> exit function
         if not pairlist:
-            self.logging.info("No pair(s) left after topcoin filter", True)
+            self.logging.info(
+                "No pair(s) left after topcoin filter. Next symrank call in 5 minutes",
+                True,
+            )
+            # extend symrank calls to 5 minute
+            self.asyncState.symrank_retry = 300
             return
 
         if pairlist and dealmode_is_signal:
@@ -748,7 +809,7 @@ class MultiBot:
                 + str(pairs)
                 + ". Maximum active deals (mad) set to "
                 + str(mad)
-                + " out of "
+                + " out of max. "
                 + str(maxdeals),
                 True,
             )
@@ -759,7 +820,7 @@ class MultiBot:
                 "Creating multi bot '" + self.botname + "'",
                 True,
             )
-            self.report_funds_needed(maxdeals)
+            maxfunds = self.report_funds_needed(self.asyncState.dca_conf)
             # for creating a multibot at least 2 pairs needed
             if mad == 1:
                 pairs.append(self.attributes.get("market") + "_BTC")
@@ -817,7 +878,7 @@ class MultiBot:
                 + ") with filtered pair(s)",
                 True,
             )
-            self.report_funds_needed(maxdeals)
+            maxfunds = self.report_funds_needed(self.asyncState.dca_conf)
 
             error, data = self.p3cw.request(
                 entity="bots",

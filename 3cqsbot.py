@@ -106,6 +106,7 @@ asyncState.fh = 0
 asyncState.account_data = {}
 asyncState.pair_data = []
 asyncState.symrank_success = False
+asyncState.symrank_retry = 60
 asyncState.multibot = {}
 asyncState.pairs_volume = []
 asyncState.receive_signals = (
@@ -319,7 +320,7 @@ async def pair_data(account, interval_sec):
                 + account["id"]
                 + "' on '"
                 + account["market_code"]
-                + "' imported. Next update in "
+                + "' imported. Next update in approx. "
                 + format_timedelta(interval_sec, locale="en_US"),
                 more_inform,
             )
@@ -488,43 +489,6 @@ async def get_fgi(ema_fast, ema_slow):
                     )
 
                 asyncState.fgi_time_until_update = time_until_update
-
-                # display amount of 3cqs signals received per day
-                if asyncState.receive_signals:
-                    start_delta = datetime.utcnow() - asyncState.start_time
-                    logging.info(
-                        "3cqsbot running since "
-                        + format_timedelta(
-                            start_delta,
-                            locale="en_US",
-                        )
-                    )
-                    logging.info(
-                        "3cqs signals processed over 24h while bot was enabled - Start: "
-                        + str(asyncState.start_signals_24h)
-                        + " - Stop: "
-                        + str(asyncState.stop_signals_24h),
-                        True,
-                    )
-                    asyncState.start_signals_24h = 0
-                    asyncState.stop_signals_24h = 0
-                    start_per_day = asyncState.start_signals / (
-                        start_delta / timedelta(days=1)
-                    )
-                    stop_per_day = asyncState.stop_signals / (
-                        start_delta / timedelta(days=1)
-                    )
-                    logging.info(
-                        "TOTAL 3cqs signals processed while bot was enabled - Start: "
-                        + str(asyncState.start_signals)
-                        + " per day: "
-                        + f"{start_per_day:2.1f}"
-                        + " - Stop: "
-                        + str(asyncState.stop_signals)
-                        + " per day: "
-                        + f"{stop_per_day:2.1f}",
-                        True,
-                    )
 
             notification.send_notification()
             # request FGI once per day, because is is calculated only once per day
@@ -870,10 +834,7 @@ def _handle_task_result(task: asyncio.Task) -> None:
     except asyncio.CancelledError:
         pass  # Task cancellation should not be logged as an error.
     except Exception:  # pylint: disable=broad-except
-        logging.error(
-            "Exception raised by task = %r",
-            task,
-        )
+        logging.error(f"Exception raised by task = {task}")
 
 
 async def symrank():
@@ -886,7 +847,9 @@ async def symrank():
         await asyncio.sleep(5)
         # prevent from calling the symrank command too much otherwise a timeout is caused
         if not asyncState.symrank_success:
-            await asyncio.sleep(60)
+            await asyncio.sleep(asyncState.symrank_retry)
+    # reset to 60sec in case of success after topcoin filter
+    asyncState.symrank_retry = 60
 
 
 def get_deal_mode():
@@ -907,7 +870,7 @@ async def my_event_handler(event):
         account_output = asyncState.account_data
         pair_output = asyncState.pair_data
 
-        ##### if TG message with #START or #STOP
+        ##### if TG message is #START or #STOP
         if tg_output and not isinstance(tg_output, list):
 
             logging.info(
@@ -1097,6 +1060,7 @@ async def my_event_handler(event):
                 asyncState.multibot = bot.asyncState.multibot
                 asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
                 asyncState.first_topcoin_call = bot.asyncState.first_topcoin_call
+                asyncState.symrank_retry = bot.asyncState.symrank_retry
             else:
                 logging.debug(
                     "Ignoring /symrank call, because we're running in single mode!"
@@ -1138,7 +1102,57 @@ def report_funds_needed(dca_conf="dcabot"):
     return fundsneeded, pd, required_change
 
 
-def config_report():
+def report_dca_settings(dca_conf):
+    fundsneeded, pd, rc = report_funds_needed(dca_conf)
+    if dca_conf == "dcabot":
+        dca_setting = "  [dcabot]"
+    else:
+        dca_setting = (
+            "  ["
+            + dca_conf
+            + "]   FGI range: "
+            + str(attributes.get("fgi_min", "0", dca_conf))
+            + "-"
+            + str(attributes.get("fgi_max", "0", dca_conf))
+        )
+
+    logging.info(
+        dca_setting
+        + "  name: "
+        + attributes.get("prefix", "", dca_conf)
+        + "_"
+        + attributes.get("subprefix", "", dca_conf)
+        + "_"
+        + attributes.get("suffix", "", dca_conf),
+        True,
+    )
+    if attributes.get("single"):
+        logging.info(
+            "  amount of single bots: "
+            + str(attributes.get("single_count", "0", dca_conf))
+        )
+    logging.info(
+        "  mad: "
+        + str(attributes.get("mad", "0", dca_conf))
+        + "  funds needed: "
+        + format_currency(fundsneeded, "USD", locale="en_US")
+        + "  cov. max price dev: "
+        + f"{pd:2.1f}%"
+        + "  max req. change: "
+        + f"{rc:2.1f}%",
+        True,
+    )
+    if attributes.get("topcoin_filter", False):
+        logging.info(
+            "  Topcoin filter: marketcap top #"
+            + str(attributes.get("topcoin_limit", 3500, dca_conf))
+            + " and min. daily BTC trading vol.: "
+            + str(attributes.get("topcoin_volume", 0, dca_conf)),
+            True,
+        )
+
+
+def report_config():
 
     logging.info("Debug mode: '" + str(attributes.get("debug", False)) + "'", True)
     if attributes.get("single"):
@@ -1198,147 +1212,11 @@ def config_report():
         True,
     )
     if attributes.get("fgi_trading", False):
-        # report [fgi_aggressive] DCA settings
-        fundsneeded, pd, rc = report_funds_needed("fgi_aggressive")
-        logging.info(
-            "[fgi_aggressive "
-            + str(attributes.get("fgi_min", "0", "fgi_aggressive"))
-            + "-"
-            + str(attributes.get("fgi_max", "0", "fgi_aggressive"))
-            + "]: "
-            + attributes.get("prefix", "", "fgi_aggressive")
-            + "_"
-            + attributes.get("subprefix", "", "fgi_aggressive")
-            + "_"
-            + attributes.get("suffix", "", "fgi_aggressive"),
-            True,
-        )
-        logging.info(
-            "   mad/single bots: "
-            + str(attributes.get("mad", "0", "fgi_aggressive"))
-            + "/"
-            + str(attributes.get("single_count", "0", "fgi_aggressive"))
-            + "  funds needed: "
-            + format_currency(fundsneeded, "USD", locale="en_US")
-            + "  cov. max price dev: "
-            + f"{pd:2.1f}%"
-            + "  max req. change: "
-            + f"{rc:2.1f}%",
-            True,
-        )
-        if attributes.get("topcoin_filter", False):
-            logging.info(
-                "   Topcoin filter: marketcap top #"
-                + str(attributes.get("topcoin_limit", 3500, "fgi_aggressive"))
-                + " - Min. daily BTC trading volume: "
-                + str(attributes.get("topcoin_volume", 0, "fgi_aggressive")),
-                True,
-            )
-        # report [fgi_moderate] DCA settings
-        fundsneeded, pd, rc = report_funds_needed("fgi_moderate")
-        logging.info(
-            "[fgi_moderate "
-            + str(attributes.get("fgi_min", "0", "fgi_moderate"))
-            + "-"
-            + str(attributes.get("fgi_max", "0", "fgi_moderate"))
-            + "]: "
-            + attributes.get("prefix", "", "fgi_moderate")
-            + "_"
-            + attributes.get("subprefix", "", "fgi_moderate")
-            + "_"
-            + attributes.get("suffix", "", "fgi_moderate"),
-            True,
-        )
-        logging.info(
-            "   mad/single bots: "
-            + str(attributes.get("mad", "0", "fgi_moderate"))
-            + "/"
-            + str(attributes.get("single_count", "0", "fgi_moderate"))
-            + "  funds needed: "
-            + format_currency(fundsneeded, "USD", locale="en_US")
-            + "  cov. max price dev: "
-            + f"{pd:2.1f}%"
-            + "  max req. change: "
-            + f"{rc:2.1f}%",
-            True,
-        )
-        if attributes.get("topcoin_filter", False):
-            logging.info(
-                "   Topcoin filter: marketcap top #"
-                + str(attributes.get("topcoin_limit", 3500, "fgi_moderate"))
-                + " - Min. daily BTC trading volume: "
-                + str(attributes.get("topcoin_volume", 0, "fgi_moderate")),
-                True,
-            )
-        # report [fgi_defensive] DCA settings
-        fundsneeded, pd, rc = report_funds_needed("fgi_defensive")
-        logging.info(
-            "[fgi_defensive "
-            + str(attributes.get("fgi_min", "0", "fgi_defensive"))
-            + "-"
-            + str(attributes.get("fgi_max", "0", "fgi_defensive"))
-            + "]: "
-            + attributes.get("prefix", "", "fgi_defensive")
-            + "_"
-            + attributes.get("subprefix", "", "fgi_defensive")
-            + "_"
-            + attributes.get("suffix", "", "fgi_defensive"),
-            True,
-        )
-        logging.info(
-            "   mad/single bots: "
-            + str(attributes.get("mad", "0", "fgi_defensive"))
-            + "/"
-            + str(attributes.get("single_count", "0", "fgi_defensive"))
-            + "  funds needed: "
-            + format_currency(fundsneeded, "USD", locale="en_US")
-            + "  cov. max price dev: "
-            + f"{pd:2.1f}%"
-            + "  max req. change: "
-            + f"{rc:2.1f}%",
-            True,
-        )
-        if attributes.get("topcoin_filter", False):
-            logging.info(
-                "   Topcoin filter: marketcap top #"
-                + str(attributes.get("topcoin_limit", 3500, "fgi_defensive"))
-                + " - Min. daily BTC trading volume: "
-                + str(attributes.get("topcoin_volume", 0, "fgi_defensive")),
-                True,
-            )
+        report_dca_settings("fgi_aggressive")
+        report_dca_settings("fgi_moderate")
+        report_dca_settings("fgi_defensive")
     else:
-        # report [dcabot] DCA settings
-        fundsneeded, pd, rc = report_funds_needed("dcabot")
-        logging.info(
-            "[dcabot]: "
-            + attributes.get("prefix", "", "dcabot")
-            + "_"
-            + attributes.get("subprefix", "", "dcabot")
-            + "_"
-            + attributes.get("suffix", "", "dcabot"),
-            True,
-        )
-        logging.info(
-            "   mad/single bots: "
-            + str(attributes.get("mad", "0", "dcabot"))
-            + "/"
-            + str(attributes.get("single_count", "0", "dcabot"))
-            + "  funds needed: "
-            + format_currency(fundsneeded, "USD", locale="en_US")
-            + "  cov. max price dev: "
-            + f"{pd:2.1f}%"
-            + "  max req. change: "
-            + f"{rc:2.1f}%",
-            True,
-        )
-        if attributes.get("topcoin_filter", False):
-            logging.info(
-                "   Topcoin filter: marketcap top #"
-                + str(attributes.get("topcoin_limit", 3500, "dcabot"))
-                + " - Min. daily BTC trading volume: "
-                + str(attributes.get("topcoin_volume", 0, "dcabot")),
-                True,
-            )
+        report_dca_settings("dcabot")
 
     logging.info(
         "External/TV bot switching: '"
@@ -1351,6 +1229,91 @@ def config_report():
         "Token whitelist: '" + str(attributes.get("token_whitelist", "No")) + "'", True
     )
     return
+
+
+async def report_statistics():
+
+    while True:
+
+        logging.info("** Signal & Bot statistics **")
+
+        start_delta = datetime.utcnow() - asyncState.start_time
+        logging.info(
+            "* Python script running since "
+            + format_timedelta(
+                start_delta,
+                locale="en_US",
+            )
+        )
+        if asyncState.receive_signals:
+            logging.info(
+                "* '"
+                + attributes.get("symrank_signal")
+                + "' signals processed over 24h - Start: "
+                + str(asyncState.start_signals_24h)
+                + " - Stop: "
+                + str(asyncState.stop_signals_24h),
+                True,
+            )
+            asyncState.start_signals_24h = 0
+            asyncState.stop_signals_24h = 0
+            start_per_day = asyncState.start_signals / (start_delta / timedelta(days=1))
+            stop_per_day = asyncState.stop_signals / (start_delta / timedelta(days=1))
+            logging.info(
+                "* '"
+                + attributes.get("symrank_signal")
+                + "' signals processed since bot start - #Start: "
+                + str(asyncState.start_signals)
+                + " per day: "
+                + f"{start_per_day:2.1f}"
+                + " - #Stop: "
+                + str(asyncState.stop_signals)
+                + " per day: "
+                + f"{stop_per_day:2.1f}",
+                True,
+            )
+
+        logging.info("* actual DCA bot setting:", True)
+        report_dca_settings(asyncState.dca_conf)
+
+        if attributes.get("single"):
+            bot = SingleBot([], bot_data(), {}, attributes, p3cw, logging, asyncState)
+        # True = disable all single bots
+        elif asyncState.multibot == {}:
+            bot = MultiBot(
+                [],
+                bot_data(),
+                {},
+                0,
+                attributes,
+                p3cw,
+                logging,
+                asyncState,
+            )
+        else:
+            bot = MultiBot(
+                [],
+                asyncState.multibot,
+                {},
+                0,
+                attributes,
+                p3cw,
+                logging,
+                asyncState,
+            )
+
+        bot.report_deals()
+
+        midnight = (datetime.now() + timedelta(days=1)).replace(
+            hour=0, minute=0, microsecond=0, second=0
+        )
+        time_until_update = midnight - datetime.now()
+        logging.info(
+            "* next statistics update in approx. "
+            + format_timedelta(time_until_update, locale="en_US"),
+            True,
+        )
+        await asyncio.sleep(time_until_update.seconds)
 
 
 async def main():
@@ -1376,7 +1339,7 @@ async def main():
     pair_data_task.add_done_callback(_handle_task_result)
     await asyncio.sleep(3)
 
-    config_report()
+    report_config()
 
     # Check for inconsistencies of bot switching before starting 3cqsbot
     if attributes.get("btc_pulse", False) and attributes.get("ext_botswitch", False):
@@ -1445,8 +1408,17 @@ async def main():
         else:
             asyncState.bot_active = False
 
+    report_statistics_task = client.loop.create_task(report_statistics())
+    report_statistics_task.add_done_callback(_handle_task_result)
+    await asyncio.sleep(3)
+
     ##### Wait for TG signals of 3C Quick Stats channel #####
-    logging.info("** Waiting for 3CQS signals **", True)
+    logging.info(
+        "** Waiting for '"
+        + attributes.get("symrank_signal")
+        + "' 3CQS signals on Telegram **",
+        True,
+    )
     asyncState.receive_signals = True
     notification.send_notification()
 
