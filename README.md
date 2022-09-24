@@ -1,4 +1,10 @@
-# Based on TBMoonWalker's 3CQSBot v2.1.4-alpha script - Improved by M1ch43l with adding following features v.2.5.0-alpha
+# Based on TBMoonWalker's 3CQSBot v2.1.4-alpha script - Improved by M1ch43l with adding following features v.2.6.0-beta
+
+2022.09.24:
+
+1. New midnight statistics implemented including mean profit per day/month/year and ROI for single- and multibot
+
+2022.09.14:
 
 1. Implementation of sentiment trading according to the Crypto Fear and Greed Index (FGI) with separate DCA profiles including profile specific topcoin filter settings and amount of concurrent deals. New sections `[fgi_aggressive]`, `[fgi_moderate]` and `[fgi_defensive]` added for individual single/multi bot DCA configurations
 2. Implementation of fgi_pulse trading, similar to btc_pulse however using the crossing of EMA9 to EMA20 as default values to decide for trading
