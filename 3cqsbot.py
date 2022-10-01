@@ -30,9 +30,6 @@ from singlebot import SingleBot
 #                       Config                       #
 ######################################################
 
-# load configuration file
-attributes = Config()
-
 program = Path(__file__).stem
 
 # Parse and interpret options
@@ -44,6 +41,9 @@ if args.datadir:
     datadir = args.datadir
 else:
     datadir = os.getcwd()
+
+# load configuration file
+attributes = Config(datadir, program)
 
 # Handle timezone
 if hasattr(time, "tzset"):
@@ -67,7 +67,7 @@ logging = Logger(
     attributes.get("notifications", False),
 )
 
-logging.info(f"Loaded configuration from '{datadir}/config.ini'")
+logging.info(f"Loaded configuration from '{datadir}/{program}.ini' or config.ini")
 
 ######################################################
 #                        Init                        #
@@ -114,8 +114,12 @@ asyncState.receive_signals = (
 )
 asyncState.start_time = 0
 asyncState.start_signals_24h = 0
-asyncState.stop_signals_24h = 0
 asyncState.start_signals = 0
+asyncState.start_signals_filter_passed_24h = 0
+asyncState.start_signals_filter_passed = 0
+asyncState.start_signals_bot_enabled_24h = 0
+asyncState.start_signals_bot_enabled = 0
+asyncState.stop_signals_24h = 0
 asyncState.stop_signals = 0
 
 ######################################################
@@ -938,6 +942,9 @@ async def my_event_handler(event):
                 )
                 return
 
+            if asyncState.bot_active:
+                asyncState.start_signals_active_24h += 1
+
             # Check if pair is tradeable
             if not tg_output["pair"] in pair_output:
                 logging.info(
@@ -1181,7 +1188,6 @@ def report_config():
             + "'",
             True,
         )
-    logging.info("BTC pulse: '" + str(attributes.get("btc_pulse", False)) + "'", True)
     logging.info(
         "Topcoin filter: '" + str(attributes.get("topcoin_filter", False)) + "'", True
     )
@@ -1195,6 +1201,7 @@ def report_config():
             + str(attributes.get("topcoin_volume", 0, asyncState.dca_conf)),
             True,
         )
+    logging.info("BTC pulse: '" + str(attributes.get("btc_pulse", False)) + "'", True)
     logging.info(
         "FGI pulse: '"
         + str(attributes.get("fgi_pulse", False))
@@ -1239,45 +1246,69 @@ async def report_statistics():
 
     while True:
 
-        logging.info("** Signal & Bot statistics **")
+        logging.info("********** Signal & Bot statistics **********", True)
 
         start_delta = datetime.utcnow() - asyncState.start_time
         logging.info(
-            "* Python script running since "
-            + format_timedelta(
-                start_delta,
-                locale="en_US",
-            )
+            "Python script running since "
+            + format_timedelta(start_delta, locale="en_US"),
+            True,
         )
         if asyncState.receive_signals:
             logging.info(
-                "* '"
+                "'"
                 + attributes.get("symrank_signal")
-                + "' signals processed over 24h - Start: "
+                + "' signals received over last 24h  - #Start: "
                 + str(asyncState.start_signals_24h)
-                + " - Stop: "
+                + " - #Stop: "
                 + str(asyncState.stop_signals_24h),
                 True,
             )
+            logging.info(
+                "#Start signals processed while bot was enabled last 24h: "
+                + str(asyncState.start_signals_bot_enabled_24h),
+                True,
+            )
+            logging.info(
+                "#Start signals passing topcoin filter last 24h: "
+                + str(asyncState.start_signals_filter_passed_24h),
+                True,
+            )
+            asyncState.start_signals_bot_enabled += (
+                asyncState.start_signals_bot_enabled_24h
+            )
+            asyncState.start_signals_filter_passed += (
+                asyncState.start_signals_filter_passed_24h
+            )
             asyncState.start_signals_24h = 0
+            asyncState.start_signals_bot_enabled_24h = 0
+            asyncState.start_signals_filter_passed_24h = 0
             asyncState.stop_signals_24h = 0
             start_per_day = asyncState.start_signals / (start_delta / timedelta(days=1))
             stop_per_day = asyncState.stop_signals / (start_delta / timedelta(days=1))
             logging.info(
-                "* '"
-                + attributes.get("symrank_signal")
-                + "' signals processed since bot start - #Start: "
+                "Total signals processed since bot start - #Start: "
                 + str(asyncState.start_signals)
-                + " per day: "
-                + f"{start_per_day:2.1f}"
+                + " (per day: "
+                + f"{start_per_day:2.1f})"
                 + " - #Stop: "
                 + str(asyncState.stop_signals)
-                + " per day: "
-                + f"{stop_per_day:2.1f}",
+                + " (per day: "
+                + f"{stop_per_day:2.1f})",
+                True,
+            )
+            logging.info(
+                "Total #Start signals while bot was enabled: "
+                + str(asyncState.start_signals_bot_enabled),
+                True,
+            )
+            logging.info(
+                "Total #Start passing topcoin filter: "
+                + str(asyncState.start_signals_filter_passed),
                 True,
             )
 
-        logging.info("* actual DCA bot setting:", True)
+        logging.info("Actual DCA bot setting:", True)
         report_dca_settings(asyncState.dca_conf)
 
         if attributes.get("single"):
@@ -1313,11 +1344,12 @@ async def report_statistics():
         )
         time_until_update = midnight - datetime.now()
         logging.info(
-            "* next statistics update in approx. "
+            "Next statistics update in approx. "
             + format_timedelta(time_until_update, locale="en_US"),
             True,
         )
-        await asyncio.sleep(time_until_update.seconds)
+        logging.info("********************************************************", True)
+        await asyncio.sleep(time_until_update.seconds + 1)
 
 
 async def main():

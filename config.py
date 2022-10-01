@@ -3,10 +3,14 @@ import sys
 
 
 class Config:
-    def __init__(self):
+    def __init__(self, datadir, program):
         self.config = configparser.ConfigParser()
-        self.dataset = self.config.read("config.ini")
+        self.dataset = self.config.read(f"{datadir}/{program}.ini")
+        if self.dataset == []:
+            self.dataset = self.config.read("config.ini")
         self.fixstrings = ["account_name", "prefix", "subprefix", "suffix"]
+        self.datadir = datadir
+        self.program = program
 
     def get(self, attribute, defaultvalue="", section: str = None):
         data = ""
@@ -14,7 +18,7 @@ class Config:
         if len(self.dataset) != 1:
             sys.tracebacklimit = 0
             sys.exit(
-                "Cannot read config.ini! - Please make sure it exists in the folder where 3cqsbot.py is executed."
+                f"Cannot read {self.datadir}/{self.program}.ini or config.ini! - Please make sure it exists in the folder where 3cqsbot.py is executed."
             )
 
         sections = self.config.sections()

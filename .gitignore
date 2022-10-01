@@ -2,8 +2,7 @@
 *.pyc
 *.session
 *.session-journal
-config.ini
-config.ini.old
-config.ini.new
+*.ini
+*.ini.*
 launch.json
 logs/*

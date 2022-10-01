@@ -957,6 +957,7 @@ class MultiBot:
                         "Topcoin filter disabled, not filtering pairs!", more_inform
                     )
                 if pair:
+                    self.asyncState.start_signals_filter_passed_24h = +1
                     if pair in self.asyncState.multibot["pairs"]:
                         self.logging.info(
                             pair + " is already included in the pair list", more_inform
