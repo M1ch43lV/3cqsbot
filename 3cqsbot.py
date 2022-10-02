@@ -1164,7 +1164,7 @@ def report_dca_settings(dca_conf):
 
 
 def report_config():
-
+    logging.info("********** Config reporting **********", True)
     logging.info("Debug mode: '" + str(attributes.get("debug", False)) + "'", True)
     if attributes.get("single"):
         logging.info("Bot mode: 'single pair'", True)
@@ -1239,6 +1239,7 @@ def report_config():
     logging.info(
         "Token whitelist: '" + str(attributes.get("token_whitelist", "No")) + "'", True
     )
+    logging.info("********** End of config reporting **********", True)
     return
 
 
@@ -1348,7 +1349,7 @@ async def report_statistics():
             + format_timedelta(time_until_update, locale="en_US"),
             True,
         )
-        logging.info("********************************************************", True)
+        logging.info("********** End of statistics reporting **********", True)
         await asyncio.sleep(time_until_update.seconds + 1)
 
 
@@ -1360,12 +1361,10 @@ async def main():
     signals = Signals(logging)
 
     ##### Initial reporting #####
-    logging.info("*** 3CQS Bot started ***", True)
+    logging.info("********** 3CQS Bot started **********", True)
     asyncState.start_time = datetime.utcnow()
     user = await client.get_participants("The3CQSBot")
     asyncState.chatid = user[0].id
-
-    logging.info("** Configuration **", True)
 
     asyncState.account_data = account_data()
     # Update available pair_data every 360 minutes for e.g. new blacklisted pairs or new tradable pairs
@@ -1450,9 +1449,9 @@ async def main():
 
     ##### Wait for TG signals of 3C Quick Stats channel #####
     logging.info(
-        "** Waiting for '"
+        "********** Waiting for '"
         + attributes.get("symrank_signal")
-        + "' 3CQS signals on Telegram **",
+        + "' 3CQS signals on Telegram **********",
         True,
     )
     asyncState.receive_signals = True
