@@ -943,7 +943,7 @@ async def my_event_handler(event):
                 return
 
             if asyncState.bot_active:
-                asyncState.start_signals_active_24h += 1
+                asyncState.start_signals_bot_enabled_24h += 1
 
             # Check if pair is tradeable
             if not tg_output["pair"] in pair_output:
