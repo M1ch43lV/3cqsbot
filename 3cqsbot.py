@@ -369,7 +369,8 @@ async def get_fgi(ema_fast, ema_slow):
         )
     elif attributes.get("fgi_trading", False):
         logging.info(
-            "********** Initialising FGI adapted DCA settings **********", True
+            "********** Initialising FGI adapted DCA settings **********",
+            True,
         )
 
     logging.info(
