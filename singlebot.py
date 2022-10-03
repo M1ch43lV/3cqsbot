@@ -613,7 +613,7 @@ class SingleBot:
                             )
 
                         if pair:
-                            self.asyncState.start_signals_filter_passed_24h = +1
+                            self.asyncState.start_signals_topcoin_filter_passed_24h = +1
                             # avoid deals over limit
                             if active_deals_counted < self.attributes.get(
                                 "single_count", "", self.asyncState.dca_conf

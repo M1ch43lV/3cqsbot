@@ -115,10 +115,12 @@ asyncState.receive_signals = (
 asyncState.start_time = 0
 asyncState.start_signals_24h = 0
 asyncState.start_signals = 0
-asyncState.start_signals_filter_passed_24h = 0
-asyncState.start_signals_filter_passed = 0
 asyncState.start_signals_bot_enabled_24h = 0
 asyncState.start_signals_bot_enabled = 0
+asyncState.start_signals_symrank_filter_passed_24h = 0
+asyncState.start_signals_symrank_filter_passed = 0
+asyncState.start_signals_topcoin_filter_passed_24h = 0
+asyncState.start_signals_topcoin_filter_passed = 0
 asyncState.stop_signals_24h = 0
 asyncState.stop_signals = 0
 
@@ -355,6 +357,7 @@ def requests_call(method, url, timeout):
 
 async def get_fgi(ema_fast, ema_slow):
 
+    logging.info("********** Initialising FGI **********", True)
     logging.info(
         "Using crypto fear and greed index (FGI) from alternative.me for changing 3cqsbot DCA settings to defensive, moderate or aggressive",
         True,
@@ -549,7 +552,7 @@ def btctechnical(symbol):
 # https://discord.gg/tradealts
 async def get_btcpulse(interval_sec):
 
-    logging.info("Starting btc-pulse", True)
+    logging.info("********** Initialising BTC Pulse **********", True)
     i = round(3600 / interval_sec, 0)
     while True:
         try:
@@ -928,10 +931,10 @@ async def my_event_handler(event):
             # statistics about signals
             if tg_output["action"] == "START":
                 asyncState.start_signals_24h += 1
-                asyncState.start_signals += 1
+                if asyncState.bot_active:
+                    asyncState.start_signals_bot_enabled_24h += 1
             elif tg_output["action"] == "STOP":
                 asyncState.stop_signals_24h += 1
-                asyncState.stop_signals += 1
 
             # Check if bot is active
             if not asyncState.bot_active and not attributes.get(
@@ -942,9 +945,6 @@ async def my_event_handler(event):
                 )
                 return
 
-            if asyncState.bot_active:
-                asyncState.start_signals_bot_enabled_24h += 1
-
             # Check if pair is tradeable
             if not tg_output["pair"] in pair_output:
                 logging.info(
@@ -954,6 +954,7 @@ async def my_event_handler(event):
                     + "'",
                     more_inform,
                 )
+                asyncState.start_signals_not_tradeable_24h += 1
                 return
 
             # Check if 3cqs START signal passes optional symrank criteria
@@ -984,6 +985,8 @@ async def my_event_handler(event):
                         more_inform,
                     )
                     return
+                else:
+                    asyncState.start_signals_symrank_filter_passed_24h += 1
 
             # for single and multibot: if dealmode == signal and STOP signal is sent than ignore
             if tg_output["action"] == "STOP" and dealmode_signal:
@@ -1271,24 +1274,38 @@ async def report_statistics():
                 True,
             )
             logging.info(
-                "#Start signals passing topcoin filter last 24h: "
-                + str(asyncState.start_signals_filter_passed_24h),
+                "#Start signals passing symrank filter last 24h: "
+                + str(asyncState.start_signals_symrank_filter_passed_24h),
                 True,
             )
+            logging.info(
+                "#Start signals passing topcoin filter last 24h: "
+                + str(asyncState.start_signals_topcoin_filter_passed_24h),
+                True,
+            )
+
+            asyncState.start_signals += asyncState.start_signals_24h
             asyncState.start_signals_bot_enabled += (
                 asyncState.start_signals_bot_enabled_24h
             )
-            asyncState.start_signals_filter_passed += (
-                asyncState.start_signals_filter_passed_24h
+            asyncState.start_signals_symrank_filter_passed += (
+                asyncState.start_signals_symrank_filter_passed_24h
             )
+            asyncState.start_signals_topcoin_filter_passed += (
+                asyncState.start_signals_topcoin_filter_passed_24h
+            )
+            asyncState.stop_signals += asyncState.stop_signals_24h
+
             asyncState.start_signals_24h = 0
             asyncState.start_signals_bot_enabled_24h = 0
-            asyncState.start_signals_filter_passed_24h = 0
+            asyncState.start_signals_symrank_filter_passed_24h = 0
+            asyncState.start_signals_topcoin_filter_passed_24h = 0
             asyncState.stop_signals_24h = 0
+
             start_per_day = asyncState.start_signals / (start_delta / timedelta(days=1))
             stop_per_day = asyncState.stop_signals / (start_delta / timedelta(days=1))
             logging.info(
-                "Total signals processed since bot start - #Start: "
+                "Total signals processed since script start - #Start: "
                 + str(asyncState.start_signals)
                 + " (per day: "
                 + f"{start_per_day:2.1f})"
@@ -1304,8 +1321,13 @@ async def report_statistics():
                 True,
             )
             logging.info(
-                "Total #Start passing topcoin filter: "
-                + str(asyncState.start_signals_filter_passed),
+                "Total #Start signals passing symrank filter: "
+                + str(asyncState.start_signals_symrank_filter_passed),
+                True,
+            )
+            logging.info(
+                "Total #Start signals passing topcoin filter: "
+                + str(asyncState.start_signals_topcoin_filter_passed),
                 True,
             )
 
@@ -1449,9 +1471,9 @@ async def main():
 
     ##### Wait for TG signals of 3C Quick Stats channel #####
     logging.info(
-        "********** Waiting for '"
+        "********** Waiting for 3CQS '"
         + attributes.get("symrank_signal")
-        + "' 3CQS signals on Telegram **********",
+        + "' signals on Telegram **********",
         True,
     )
     asyncState.receive_signals = True

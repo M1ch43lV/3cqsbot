@@ -460,7 +460,7 @@ class MultiBot:
             or self.attributes.get("fgi_pulse", False)
         ):
             self.logging.error(
-                "Please add 'botid = xxxxxxx' to [3commas] for using FGI. FGI guided DCA settings will only applied "
+                "Please add 'botid = xxxxxxx' to config section [3commas] for using FGI. FGI guided DCA settings will only applied "
                 + "to existent 3cqsbot. \n Script will be aborted if no 3cqsbot is found by botname"
             )
 
@@ -957,7 +957,7 @@ class MultiBot:
                         "Topcoin filter disabled, not filtering pairs!", more_inform
                     )
                 if pair:
-                    self.asyncState.start_signals_filter_passed_24h = +1
+                    self.asyncState.start_signals_topcoin_filter_passed_24h = +1
                     if pair in self.asyncState.multibot["pairs"]:
                         self.logging.info(
                             pair + " is already included in the pair list", more_inform
