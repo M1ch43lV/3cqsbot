@@ -357,7 +357,21 @@ def requests_call(method, url, timeout):
 
 async def get_fgi(ema_fast, ema_slow):
 
-    logging.info("********** Initialising FGI **********", True)
+    if attributes.get("fgi_pulse", False) and attributes.get("fgi_trading", False):
+        logging.info(
+            "********** Initialising FGI Pulse with FGI adapted DCA settings **********",
+            True,
+        )
+    elif attributes.get("fgi_pulse", False):
+        logging.info(
+            "********** Initialising FGI Pulse only, without FGI adapted DCA settings **********",
+            True,
+        )
+    elif attributes.get("fgi_trading", False):
+        logging.info(
+            "********** Initialising FGI adapted DCA settings **********", True
+        )
+
     logging.info(
         "Using crypto fear and greed index (FGI) from alternative.me for changing 3cqsbot DCA settings to defensive, moderate or aggressive",
         True,
