@@ -117,6 +117,8 @@ asyncState.start_signals_24h = 0
 asyncState.start_signals = 0
 asyncState.start_signals_bot_enabled_24h = 0
 asyncState.start_signals_bot_enabled = 0
+asyncState.start_signals_not_tradeable_24h = 0
+asyncState.start_signals_not_tradeable = 0
 asyncState.start_signals_symrank_filter_passed_24h = 0
 asyncState.start_signals_symrank_filter_passed = 0
 asyncState.start_signals_topcoin_filter_passed_24h = 0
@@ -1289,6 +1291,11 @@ async def report_statistics():
                 True,
             )
             logging.info(
+                "#Start signals not tradeable on exchange last 24h: "
+                + str(asyncState.start_signals_not_tradeable_24h),
+                True,
+            )
+            logging.info(
                 "#Start signals passing symrank filter last 24h: "
                 + str(asyncState.start_signals_symrank_filter_passed_24h),
                 True,
@@ -1303,6 +1310,9 @@ async def report_statistics():
             asyncState.start_signals_bot_enabled += (
                 asyncState.start_signals_bot_enabled_24h
             )
+            asyncState.start_signals_not_tradeable += (
+                asyncState.start_signals_not_tradeable_24h
+            )
             asyncState.start_signals_symrank_filter_passed += (
                 asyncState.start_signals_symrank_filter_passed_24h
             )
@@ -1313,6 +1323,7 @@ async def report_statistics():
 
             asyncState.start_signals_24h = 0
             asyncState.start_signals_bot_enabled_24h = 0
+            asyncState.start_signals_not_tradeable_24h = 0
             asyncState.start_signals_symrank_filter_passed_24h = 0
             asyncState.start_signals_topcoin_filter_passed_24h = 0
             asyncState.stop_signals_24h = 0
@@ -1333,6 +1344,11 @@ async def report_statistics():
             logging.info(
                 "Total #Start signals while bot was enabled: "
                 + str(asyncState.start_signals_bot_enabled),
+                True,
+            )
+            logging.info(
+                "Total #Start signals not tradeable on exchange: "
+                + str(asyncState.start_signals_not_tradeable),
                 True,
             )
             logging.info(
