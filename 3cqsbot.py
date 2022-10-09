@@ -792,8 +792,7 @@ async def bot_switch(interval_sec):
                             asyncState,
                         )
                     bot.enable()
-                    asyncState.multibot = bot.asyncState.multibot
-                    asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
+                    asyncState.bot_active = asyncState.multibot["is_enabled"]
                     logging.info(
                         "Multi bot activated - waiting for pair #start signals",
                         True,
@@ -817,7 +816,6 @@ async def bot_switch(interval_sec):
                     )
                     # True = disable all single bots
                     bot.disable(bot_data(), True)
-                    asyncState.bot_active = bot.asyncState.bot_active
                 else:
                     if asyncState.multibot == {}:
                         bot = MultiBot(
@@ -842,8 +840,7 @@ async def bot_switch(interval_sec):
                             asyncState,
                         )
                     bot.disable()
-                    asyncState.multibot = bot.asyncState.multibot
-                    asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
+                    asyncState.bot_active = asyncState.multibot["is_enabled"]
             else:
                 logging.debug("bot_switch: Nothing do to")
 
@@ -953,15 +950,6 @@ async def my_event_handler(event):
             elif tg_output["action"] == "STOP":
                 asyncState.stop_signals_24h += 1
 
-            # Check if bot is active
-            if not asyncState.bot_active and not attributes.get(
-                "continuous_update", False
-            ):
-                logging.info(
-                    "Signal not processed because 3cqsbot is disabled", more_inform
-                )
-                return
-
             # Check if pair is tradeable
             if not tg_output["pair"] in pair_output:
                 logging.info(
@@ -971,11 +959,21 @@ async def my_event_handler(event):
                     + "'",
                     more_inform,
                 )
-                asyncState.start_signals_not_tradeable_24h += 1
+                if tg_output["action"] == "START":
+                    asyncState.start_signals_not_tradeable_24h += 1
+                return
+
+            # Check if bot is active
+            if not asyncState.bot_active and not attributes.get(
+                "continuous_update", False
+            ):
+                logging.info(
+                    "Signal not processed because 3cqsbot is disabled", more_inform
+                )
                 return
 
             # Check if 3cqs START signal passes optional symrank criteria
-            if tg_output["volatility"] != 0 and tg_output["action"] == "START":
+            if tg_output["action"] == "START" and tg_output["volatility"] != 0:
 
                 if not (
                     tg_output["volatility"]
@@ -1002,8 +1000,9 @@ async def my_event_handler(event):
                         more_inform,
                     )
                     return
-                else:
-                    asyncState.start_signals_symrank_filter_passed_24h += 1
+
+            if tg_output["action"] == "START":
+                asyncState.start_signals_symrank_filter_passed_24h += 1
 
             # for single and multibot: if dealmode == signal and STOP signal is sent than ignore
             if tg_output["action"] == "STOP" and dealmode_signal:
@@ -1048,19 +1047,14 @@ async def my_event_handler(event):
                 and not tg_output["action"] == "STOP"
             ):
                 bot.create()
-                asyncState.multibot = bot.asyncState.multibot
-                asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
-                asyncState.first_topcoin_call = bot.asyncState.first_topcoin_call
+                asyncState.bot_active = asyncState.multibot["is_enabled"]
 
             # for single and multibot: function bot.trigger() handles START and STOP signals
             if asyncState.multibot != {} or attributes.get("single"):
 
                 bot.trigger()
                 if not attributes.get("single"):
-                    asyncState.multibot = bot.asyncState.multibot
-                    asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
-                else:
-                    asyncState.bot_active = bot.asyncState.bot_active
+                    asyncState.bot_active = asyncState.multibot["is_enabled"]
 
         ##### if TG message is symrank list
         elif tg_output and isinstance(tg_output, list):
@@ -1088,10 +1082,7 @@ async def my_event_handler(event):
                     asyncState,
                 )
                 bot.create()
-                asyncState.multibot = bot.asyncState.multibot
-                asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
-                asyncState.first_topcoin_call = bot.asyncState.first_topcoin_call
-                asyncState.symrank_retry = bot.asyncState.symrank_retry
+                asyncState.bot_active = asyncState.multibot["is_enabled"]
             else:
                 logging.debug(
                     "Ignoring /symrank call, because we're running in single mode!"
@@ -1286,13 +1277,13 @@ async def report_statistics():
                 True,
             )
             logging.info(
-                "#Start signals processed while bot was enabled last 24h: "
-                + str(asyncState.start_signals_bot_enabled_24h),
+                "#Start signals not tradeable on exchange last 24h: "
+                + str(asyncState.start_signals_not_tradeable_24h),
                 True,
             )
             logging.info(
-                "#Start signals not tradeable on exchange last 24h: "
-                + str(asyncState.start_signals_not_tradeable_24h),
+                "#Start signals processed while bot was enabled last 24h: "
+                + str(asyncState.start_signals_bot_enabled_24h),
                 True,
             )
             logging.info(
@@ -1301,17 +1292,21 @@ async def report_statistics():
                 True,
             )
             logging.info(
-                "#Start signals passing topcoin filter last 24h: "
+                "#Start signals passing topcoin filter last 24h (min. ranking: "
+                + attributes.get("topcoin_limit", 3500, asyncState.dca_conf)
+                + " min. BTC vol: "
+                + attributes.get("topcoin_volume", 0, asyncState.dca_conf)
+                + "): "
                 + str(asyncState.start_signals_topcoin_filter_passed_24h),
                 True,
             )
 
             asyncState.start_signals += asyncState.start_signals_24h
-            asyncState.start_signals_bot_enabled += (
-                asyncState.start_signals_bot_enabled_24h
-            )
             asyncState.start_signals_not_tradeable += (
                 asyncState.start_signals_not_tradeable_24h
+            )
+            asyncState.start_signals_bot_enabled += (
+                asyncState.start_signals_bot_enabled_24h
             )
             asyncState.start_signals_symrank_filter_passed += (
                 asyncState.start_signals_symrank_filter_passed_24h
@@ -1322,8 +1317,8 @@ async def report_statistics():
             asyncState.stop_signals += asyncState.stop_signals_24h
 
             asyncState.start_signals_24h = 0
-            asyncState.start_signals_bot_enabled_24h = 0
             asyncState.start_signals_not_tradeable_24h = 0
+            asyncState.start_signals_bot_enabled_24h = 0
             asyncState.start_signals_symrank_filter_passed_24h = 0
             asyncState.start_signals_topcoin_filter_passed_24h = 0
             asyncState.stop_signals_24h = 0
@@ -1342,13 +1337,13 @@ async def report_statistics():
                 True,
             )
             logging.info(
-                "Total #Start signals while bot was enabled: "
-                + str(asyncState.start_signals_bot_enabled),
+                "Total #Start signals not tradeable on exchange: "
+                + str(asyncState.start_signals_not_tradeable),
                 True,
             )
             logging.info(
-                "Total #Start signals not tradeable on exchange: "
-                + str(asyncState.start_signals_not_tradeable),
+                "Total #Start signals while bot was enabled: "
+                + str(asyncState.start_signals_bot_enabled),
                 True,
             )
             logging.info(
@@ -1490,9 +1485,8 @@ async def main():
             asyncState,
         )
         bot.search_rename_3cqsbot()
-        asyncState.multibot = bot.asyncState.multibot
         if asyncState.multibot:
-            asyncState.bot_active = bot.asyncState.multibot["is_enabled"]
+            asyncState.bot_active = asyncState.multibot["is_enabled"]
         else:
             asyncState.bot_active = False
 

@@ -740,6 +740,7 @@ class MultiBot:
             )
             # extend symrank calls to 5 minute
             self.asyncState.symrank_retry = 300
+            self.asyncState.symrank_success = False
             return
 
         if pairlist and dealmode_is_signal:
