@@ -442,8 +442,8 @@ class MultiBot:
                         self.logging.error(
                             "function search_rename_3cqsbot: " + error["msg"]
                         )
-                    else:
-                        self.asyncState.multibot = data
+                    # always pass data to multibot even with error
+                    self.asyncState.multibot = data
 
                     return
 
@@ -500,8 +500,8 @@ class MultiBot:
                     self.logging.error(
                         "function search_rename_3cqsbot: " + error["msg"]
                     )
-                else:
-                    self.asyncState.multibot = data
+                # always pass data to multibot even with error
+                self.asyncState.multibot = data
 
                 return
 
