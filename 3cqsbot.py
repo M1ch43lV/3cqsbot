@@ -1292,10 +1292,10 @@ async def report_statistics():
                 True,
             )
             logging.info(
-                "#Start signals passing topcoin filter last 24h (min. ranking: "
-                + attributes.get("topcoin_limit", 3500, asyncState.dca_conf)
-                + " min. BTC vol: "
-                + attributes.get("topcoin_volume", 0, asyncState.dca_conf)
+                "#Start signals passing topcoin filter last 24h (min. ranking: #"
+                + str(attributes.get("topcoin_limit", 3500, asyncState.dca_conf))
+                + " - min. daily BTC vol: "
+                + str(attributes.get("topcoin_volume", 0, asyncState.dca_conf))
                 + "): "
                 + str(asyncState.start_signals_topcoin_filter_passed_24h),
                 True,
